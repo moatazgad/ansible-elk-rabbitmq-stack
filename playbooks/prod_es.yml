@@ -1,0 +1,31 @@
+# ---
+# - name: Install Elasticsearch
+#   hosts: prod
+#   become: true
+#   vars:
+#     # master: true  # Set to 'false' to skip master node installation
+#     # date: false        # Set to 'false' to skip join nodes installation
+
+#   tasks:
+#     - name: Install Elasticsearch Master
+#       include_role:
+#         name: elasticsearch-master
+#       when: inventory_hostname in groups['es_master']
+
+#     - name: Install Elasticsearch Data
+#       include_role:
+#         name: elasticsearch-join
+#       when: inventory_hostname in groups['es_data']
+
+---
+- name: Install Elasticsearch Master nodes
+  hosts: es_master
+  become: true
+  roles:
+    - elasticsearch-master
+
+- name: Install Elasticsearch Data nodes
+  hosts: es_data
+  become: true
+  roles:
+    - elasticsearch-join

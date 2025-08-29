@@ -1,0 +1,7 @@
+---
+- name: Install RabbitMQ
+  hosts: stage
+  become: true
+
+  roles:
+    - rabbitmq

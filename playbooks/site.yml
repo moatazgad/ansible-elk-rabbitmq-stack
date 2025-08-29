@@ -1,0 +1,24 @@
+---
+- name: Install Elasticsearch and Kibana and RabbitMQ
+  hosts: prod
+  become: true
+  vars:
+    install_elasticsearch: false  # Set to 'false' to skip Elasticsearch installation
+    install_kibana: false        # Set to 'false' to skip Kibana installation
+    install_rabbitmq: true        # Set to 'false' to skip Kibana installation
+
+  tasks:
+    - name: Install Elasticsearch
+      include_role:
+        name: elasticsearch
+      when: install_elasticsearch
+
+    - name: Install Kibana
+      include_role:
+        name: kibana
+      when: install_kibana
+
+    - name: Install RabbitMQ
+      include_role:
+        name: rabbitmq
+      when: install_rabbitmq

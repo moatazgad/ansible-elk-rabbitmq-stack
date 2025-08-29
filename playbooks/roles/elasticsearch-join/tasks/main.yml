@@ -1,0 +1,164 @@
+---
+# tasks file for roles/elasticsearch-join
+
+- name: Add Elastic GPG key
+  ansible.builtin.apt_key:
+    url: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+    state: present
+  register: elastic_key_added
+  ignore_errors: true
+
+- name: Download and save GPG key manually (if apt module doesn't work)
+  shell: |
+    wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --dearmor --yes -o /usr/share/keyrings/elasticsearch-keyring.gpg
+  when: elastic_key_added is failed
+
+- name: Ensure apt-transport-https is installed
+  apt:
+    name: apt-transport-https
+    state: present
+    update_cache: yes
+
+- name: Add Elasticsearch APT repository
+  copy:
+    dest: /etc/apt/sources.list.d/elastic-9.x.list
+    content: 'deb [signed-by=/usr/share/keyrings/elasticsearch-keyring.gpg] https://artifacts.elastic.co/packages/9.x/apt stable main'
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+
+- name: Install Elasticsearch
+  apt:
+    name: elasticsearch=9.0.1
+    state: present
+
+# - name: Generate enrollment token on master
+#   delegate_to: "{{ master_node }}"
+#   command: /usr/share/elasticsearch/bin/elasticsearch-create-enrollment-token -s node
+#   register: enrollment_token
+
+- name: Generate enrollment token on master
+  delegate_to: "{{ master_node }}"
+  command: /usr/share/elasticsearch/bin/elasticsearch-create-enrollment-token -s node
+  register: enrollment_token
+  run_once: true
+
+- name: Show token (optional)
+  debug:
+    var: enrollment_token.stdout
+
+- name: Reconfigure node with enrollment token (run on non-master nodes only)
+  command: >
+    /usr/share/elasticsearch/bin/elasticsearch-reconfigure-node
+    --enrollment-token {{ enrollment_token.stdout }}
+  when: inventory_hostname != master_node
+  register: reconfigure_result
+  notify: Restart Elasticsearch
+
+- name: Reload systemd daemon after reconfigure
+  systemd:
+    daemon_reload: yes
+  when: inventory_hostname != master_node
+
+
+ 
+# - name: Enable Elasticsearch service
+#   systemd:
+#     name: elasticsearch.service
+#     enabled: yes
+
+# - name: Start Elasticsearch service
+#   systemd:
+#     name: elasticsearch.service
+#     state: started
+
+# # Optional: Reset elastic user password — may require service to be fully up
+# - name: Wait for Elasticsearch to be responsive on port 9200
+#   wait_for:
+#     host: localhost
+#     port: 9200
+#     delay: 10
+#     timeout: 60
+#     state: started
+
+# - name: Reset elastic user password using expect
+#   expect:
+#     command: '/usr/share/elasticsearch/bin/elasticsearch-reset-password -u {{ elastic_user }} -i'
+#     responses:
+#       'Please confirm that you would like to continue \[y/N\]': 'y'
+#       'Enter password for \[elastic\]:': '{{ elastic_prod1_password }}'
+#       'Re-enter password for \[elastic\]:': '{{ elastic_prod1_password }}'
+#     timeout: 60  # Adjust timeout as needed
+#   register: reset_password_result
+#   no_log: true   # Ensures the password is not logged
+
+- name: Set cluster.name
+  lineinfile:
+    path: /etc/elasticsearch/elasticsearch.yml
+    regexp: '^#?\s*cluster\.name:'
+    line: 'cluster.name: elasticsearch-prod-cluster'
+    backrefs: yes
+  notify: Restart Elasticsearch
+
+- name: Set node.name
+  lineinfile:
+    path: /etc/elasticsearch/elasticsearch.yml
+    regexp: '^#?\s*node\.name:'
+    line: "node.name: {{ inventory_hostname }}"
+    backrefs: yes
+  notify: Restart Elasticsearch # Restart only if changes applied
+
+- name: Ensure node.roles is set to master, data
+  lineinfile:
+    path: /etc/elasticsearch/elasticsearch.yml
+    regexp: '^#?\s*node\.roles:'
+    line: 'node.roles: [ "master", "data" ]'
+    state: present
+    create: yes
+  notify: Restart Elasticsearch
+
+
+
+  
+- name: Set network.host to 0.0.0.0
+  lineinfile:
+    path: /etc/elasticsearch/elasticsearch.yml
+    regexp: '^#?\s*network\.host:'
+    line: 'network.host: 0.0.0.0'
+    backrefs: yes
+  notify: Restart Elasticsearch
+
+- name: Set transport.host to 0.0.0.0
+  lineinfile:
+    path: /etc/elasticsearch/elasticsearch.yml
+    regexp: '^#?\s*transport\.host:'
+    line: 'transport.host: 0.0.0.0'
+    backrefs: yes
+  notify: Restart Elasticsearch
+
+- name: Set discovery.seed_hosts with all prod nodes
+  lineinfile:
+    path: /etc/elasticsearch/elasticsearch.yml
+    regexp: '^discovery\.seed_hosts:'
+    line: "{{ 'discovery.seed_hosts: [' + (groups['prod'] | map('regex_replace', '^(.*)$', '\"\\1\"') | join(', ')) + ']' }}"
+    create: yes
+  notify: Restart Elasticsearch
+
+
+
+
+# - name: Reset elastic user password
+#   command: /usr/share/elasticsearch/bin/elasticsearch-reset-password -u elastic --batch -p "{{ elastic_password }}"
+
+# - name: Reset elastic user password
+#   command: /usr/share/elasticsearch/bin/elasticsearch-reset-password -u elastic --batch
+#   register: reset_output
+
+
+# - name: Show password output
+#   debug:
+#     var: reset_output.stdout_lines

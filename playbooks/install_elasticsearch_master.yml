@@ -1,0 +1,7 @@
+---
+- name: Install Elasticsearch
+  hosts: es_master3
+  become: true
+
+  roles:
+    - elasticsearch-join

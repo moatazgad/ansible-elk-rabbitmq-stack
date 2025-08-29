@@ -1,0 +1,7 @@
+---
+- name: Install Kibana
+  hosts: es_master
+  become: true
+
+  roles:
+    - kibana

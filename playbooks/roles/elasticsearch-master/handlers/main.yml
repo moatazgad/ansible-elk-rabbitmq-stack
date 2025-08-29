@@ -1,0 +1,10 @@
+---
+# handlers file for roles/elasticsearch-master
+
+# roles/elasticsearch-master/handlers/main.yml
+
+- name: Restart Elasticsearch
+  ansible.builtin.systemd:
+    name: elasticsearch
+    state: restarted
+    enabled: yes

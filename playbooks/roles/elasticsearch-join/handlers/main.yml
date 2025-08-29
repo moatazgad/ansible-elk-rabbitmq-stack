@@ -1,0 +1,8 @@
+---
+# handlers file for roles/elasticsearch-join
+
+- name: Restart Elasticsearch
+  ansible.builtin.systemd:
+    name: elasticsearch
+    state: restarted
+    enabled: yes

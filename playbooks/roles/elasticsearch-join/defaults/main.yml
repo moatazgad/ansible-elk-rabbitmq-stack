@@ -1,0 +1,5 @@
+---
+# defaults file for roles/elasticsearch-join
+# cluster_name: elasticsearch-demo
+
+master_node: algmbotes1prod

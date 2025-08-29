@@ -1,0 +1,96 @@
+---
+# tasks file for roles/kibana
+
+- name: Add Elastic GPG key
+  ansible.builtin.apt_key:
+    url: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+    state: present
+  register: elastic_key_added
+  ignore_errors: true
+
+- name: Download and save GPG key manually (if apt_key module doesn't work)
+  shell: |
+    wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo gpg --dearmor --yes -o /usr/share/keyrings/elasticsearch-keyring.gpg
+  when: elastic_key_added is failed
+
+- name: Ensure apt-transport-https is installed
+  apt:
+    name: apt-transport-https
+    state: present
+    update_cache: yes
+
+- name: Add Elasticsearch APT repository
+  copy:
+    dest: /etc/apt/sources.list.d/elastic-9.x.list
+    content: 'deb [signed-by=/usr/share/keyrings/elasticsearch-keyring.gpg] https://artifacts.elastic.co/packages/9.x/apt stable main'
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+
+  
+- name: Install Kibana
+  apt:
+    name: kibana=9.0.1
+    state: present
+
+- name: Modify kibana.yml to listen on all interfaces
+  lineinfile:
+    path: /etc/kibana/kibana.yml
+    regexp: '^#?server.host:.*'
+    line: 'server.host: "0.0.0.0"'
+  notify: Restart Kibana
+
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: yes
+  become: true
+
+- name: Enable Kibana service
+  systemd:
+    name: kibana.service
+    enabled: yes
+  become: true
+
+- name: Start Kibana service
+  systemd:
+    name: kibana.service
+    state: started
+  become: true
+
+# - name: Generate Kibana enrollment token
+#   shell: 'sudo /usr/share/elasticsearch/bin/elasticsearch-create-enrollment-token -s kibana'
+#   become: true
+#   register: enrollment_token
+#   changed_when: false
+
+# - name: Show Kibana enrollment token
+#   debug:
+#     var: enrollment_token.stdout_lines
+
+- name: Wait for Kibana to be responsive on port 5601
+  wait_for:
+    port: 5601
+    delay: 10
+    timeout: 60
+
+- name: Show Kibana status
+  shell: 'sudo systemctl status kibana'
+  become: true
+  register: kibana_status
+  changed_when: false
+
+- name: Display Kibana status
+  debug:
+    var: kibana_status.stdout_lines
+
+# then run 
+
+# sudo /usr/share/elasticsearch/bin/elasticsearch-create-enrollment-token -s kibana
+# Open IP:5601 and add token
+# sudo systemctl status kibana and get code
+# Open IP:5601 and add code
